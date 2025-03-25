@@ -1,0 +1,244 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  Int                  @id @default(autoincrement())
+  name                String
+  passCode            String               @unique
+  isActive            Boolean              @default(true)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  lastNotification    DateTime?
+  reportNotifications ReportNotification[]
+  telegramAccounts    TelegramAccount[]
+  transactions        Transaction[]
+  workSessions        WorkSession[]
+}
+
+model TelegramAccount {
+  id         Int      @id @default(autoincrement())
+  telegramId String   @unique
+  username   String?
+  firstName  String?
+  lastName   String?
+  userId     Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Admin {
+  id         Int      @id @default(autoincrement())
+  telegramId String   @unique
+  username   String?
+  firstName  String?
+  lastName   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model SystemSettings {
+  id                     Int      @id @default(autoincrement())
+  reportReminderInterval Int      @default(180)
+  reportWaitTime         Int      @default(10)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model Transaction {
+  id           Int      @id @default(autoincrement())
+  externalId   String?
+  orderNo      String?
+  dateTime     DateTime
+  type         String
+  asset        String
+  amount       Float
+  totalPrice   Float
+  unitPrice    Float
+  counterparty String?
+  status       String
+  originalData Json?
+  userId       Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  matches      Match[]
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([externalId, userId])
+}
+
+model WorkSession {
+  id            Int       @id @default(autoincrement())
+  startTime     DateTime
+  endTime       DateTime?
+  duration      Int?
+  autoCompleted Boolean   @default(false)
+  userId        Int
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ReportNotification {
+  id               Int       @id @default(autoincrement())
+  notificationTime DateTime
+  reportReceived   Boolean   @default(false)
+  reportTime       DateTime?
+  adminNotified    Boolean   @default(false)
+  adminNotifyTime  DateTime?
+  userId           Int
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model NotificationSettings {
+  id        Int      @id @default(autoincrement())
+  settings  Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model IdexCabinet {
+  id            Int               @id @default(autoincrement())
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  idexId        Int
+  login         String
+  password      String
+  transactions  IdexTransaction[]
+  IdexSyncOrder IdexSyncOrder[]
+}
+
+model IdexTransaction {
+  id                Int         @id @default(autoincrement())
+  externalId        BigInt
+  paymentMethodId   BigInt
+  wallet            String
+  amount            Json
+  total             Json
+  status            Int
+  approvedAt        String?
+  expiredAt         String?
+  createdAtExternal String
+  updatedAtExternal String
+  extraData         Json
+  cabinetId         Int
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  cabinet           IdexCabinet @relation(fields: [cabinetId], references: [id], onDelete: Cascade)
+  matches           Match[]
+
+  @@unique([externalId, cabinetId])
+}
+
+model Match {
+  id                Int             @id @default(autoincrement())
+  idexTransactionId Int
+  transactionId     Int
+  timeDifference    Int
+  grossExpense      Float
+  grossIncome       Float
+  grossProfit       Float
+  profitPercentage  Float
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  idexTransaction   IdexTransaction @relation(fields: [idexTransactionId], references: [id])
+  transaction       Transaction     @relation(fields: [transactionId], references: [id])
+
+  @@unique([idexTransactionId, transactionId])
+}
+
+model Card {
+  id         Int      @id @default(autoincrement())
+  externalId Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  provider    String
+  cardNumber  String
+  bank        String
+  phoneNumber String
+  appPin      Int
+  terminalPin String
+  balances    CardBalance[]
+
+  comment String
+  status  String
+  picachu String
+}
+
+model CardBalance {
+  id           Int      @id @default(autoincrement())
+  cardId       Int
+  card         Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  date         DateTime
+  startBalance Float
+  endBalance   Float
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([cardId, date])
+}
+
+model Salary {
+  id          Int             @id @default(autoincrement())
+  fullName    String
+  position    String
+  startDate   DateTime
+  payday      Int // День выплаты зарплаты в месяце
+  paydayMonth Int? // Месяц выплаты (null если ежемесячно)
+  fixedSalary Float? // Фиксированная зарплата (null если не фиксированная)
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  payments    SalaryPayment[]
+}
+
+model SalaryPayment {
+  id          Int      @id @default(autoincrement())
+  salaryId    Int
+  salary      Salary   @relation(fields: [salaryId], references: [id], onDelete: Cascade)
+  amount      Float
+  paymentDate DateTime
+  comment     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// model SalaryDep {
+//   id  Int @id @default(autoincrement())
+//   date DateTime
+//   amount  Float
+
+//   user  
+// }
+
+enum IdexSyncOrderStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+model IdexSyncOrder {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cabinetId Int?
+  cabinet   IdexCabinet? @relation(fields: [cabinetId], references: [id], onDelete: Cascade)
+
+  processed Json? // [{cabinetId: 1, transactions: 200, newTransactions: 100}]
+
+  status IdexSyncOrderStatus
+  startSyncAt DateTime?
+  endSyncAt   DateTime?
+  pages Int[]
+}
