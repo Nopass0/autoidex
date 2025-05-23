@@ -473,6 +473,28 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 2000): Pr
 }
 
 /**
+ * Создает автоматическое задание на синхронизацию всех кабинетов
+ * @returns ID созданного задания или null при ошибке
+ */
+async function createAutoSyncOrder(): Promise<number | null> {
+  try {
+    const newOrder = await withRetry(() => prisma.idexSyncOrder.create({
+      data: {
+        status: IdexSyncOrderStatus.PENDING,
+        pages: [10], // 10 страниц для каждого кабинета
+        cabinetId: null // null означает синхронизацию всех кабинетов
+      }
+    }));
+    
+    console.info(`Создано автоматическое задание на синхронизацию всех кабинетов (ID: ${newOrder.id})`);
+    return newOrder.id;
+  } catch (error) {
+    console.error(`Ошибка при создании автоматического задания: ${error.message}`);
+    return null;
+  }
+}
+
+/**
  * Основной цикл проверки и обработки заданий на синхронизацию IDEX
  * @param checkInterval Интервал проверки в миллисекундах
  */
@@ -481,6 +503,13 @@ async function watchForSyncOrders(checkInterval: number = 10000) {
   
   // Флаг для отслеживания состояния работы
   let isRunning = true;
+  
+  // Время последней автоматической синхронизации
+  let lastAutoSyncTime = Date.now();
+  const autoSyncInterval = 6 * 60 * 60 * 1000; // 6 часов в миллисекундах
+  
+  // Создаем первое автоматическое задание при запуске
+  await createAutoSyncOrder();
   
   // Обработка сигналов завершения
   process.on('SIGINT', () => {
@@ -504,6 +533,14 @@ async function watchForSyncOrders(checkInterval: number = 10000) {
   // Бесконечный цикл проверки и обработки
   while (isRunning) {
     try {
+      // Проверяем, нужно ли создать автоматическое задание
+      const currentTime = Date.now();
+      if (currentTime - lastAutoSyncTime >= autoSyncInterval) {
+        console.info('Время для автоматической синхронизации всех кабинетов');
+        await createAutoSyncOrder();
+        lastAutoSyncTime = currentTime;
+      }
+      
       // Проверяем наличие заданий со статусом PENDING
       const pendingOrders = await withRetry(() => prisma.idexSyncOrder.findMany({
         where: {
@@ -519,6 +556,10 @@ async function watchForSyncOrders(checkInterval: number = 10000) {
         const now = new Date();
         if (now.getMinutes() % 10 === 0 && now.getSeconds() < 10) {
           console.info(`[${now.toISOString()}] Ожидание новых заданий на синхронизацию IDEX...`);
+          
+          // Также выводим информацию о следующей автоматической синхронизации
+          const nextAutoSyncIn = Math.ceil((autoSyncInterval - (currentTime - lastAutoSyncTime)) / 1000 / 60);
+          console.info(`Следующая автоматическая синхронизация через ${nextAutoSyncIn} минут`);
         }
       }
     } catch (error) {
